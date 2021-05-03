@@ -1,0 +1,137 @@
+---
+title: "Robert Final StockX Sale Prediction"
+author: "Robert Carter"
+date: "5/2/2021"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r}
+library(readxl)
+library(ISLR)
+library(tree)
+stockx_df <- read_excel('/Users/robertcarter/Desktop/StockX-Data-Contest-2019-3.xlsx')
+shoedata <- as.data.frame(stockx_df)
+
+head(shoedata)
+```
+
+Renaming the fields to make it easier when calling the fields back.
+```{r}
+names(shoedata) <- tolower(gsub("\\.", "_", names(shoedata)))
+names(shoedata) <- gsub("\\(", "", names(shoedata))
+names(shoedata) <- gsub("\\)", "", names(shoedata))
+names(shoedata) <- gsub(" ", "_", names(shoedata)) 
+```
+
+
+Taking a look at the data. We are looking at the names that were just changed. Also, took a look at the unique brands of the data and there were only 2. Last, did a quick summary of the data. It look like the highest retail price for the shoes at 250, the highest sale price was 4050, and the median sale price was 370. It looks like there is a good chance that by puchasing a pair of shoes will lead to making a profit.
+```{r}
+names(shoedata)
+
+unique(shoedata$brand)
+
+summary(shoedata)
+```
+
+Doing a simple linear regression on the data. Checking to see how significant brand is to the data. Brand appears to be statistically signifacnt to the data set, the Yeey brand in particular.
+```{r}
+slr <- lm(sale_price ~ brand, data = shoedata)
+summary(slr)
+```
+
+We are opening up the linear regression model to more field. This time we are checking the significance of brand, release date, retail price, and shoe size compared to sale price. Again, all fields are significant.
+```{r}
+lmshoes <- lm(sale_price ~ brand + release_date + retail_price + shoe_size, data=shoedata)
+summary(lmshoes)
+```
+
+Going for further into data exploratoin, now taking a look athe the means for both brands. The first shoes the mean sale price for both brands. The Off-White brands on average resale s higher than Yeezy. However, on average Yeezy retail for more than Off-White.
+```{r}
+tapply(shoedata$sale_price, shoedata$brand, mean)
+tapply(shoedata$retail_price, shoedata$brand, mean)
+```
+
+
+Now we are going to take a look at box plots for both mean of sale price and retail price for each brand.
+```{r}
+boxplot(shoedata$retail_price ~ shoedata$brand)
+```
+
+```{r}
+boxplot(shoedata$sale_price ~ shoedata$brand)
+```
+Does brand affect resale price
+H0:The mean will not be different between brnads
+HA:The mean will be diferent between brands
+For tis test we are going to take a look a one way anova test to see if there is any significane in the mean for sale price between brands. The is high significance in the means, therefore we do not reject the null hypothesis. 
+```{r}
+oneway.test(shoedata$sale_price~shoedata$brand)
+```
+
+Double check the one way test results with an anova test and Tukey multiple pairwise-comparisons. The results are again significant and the Tukey comparison shows a $311  difference between sale price.
+```{r}
+aov.out = aov(sale_price~brand, data=shoedata)
+summary(aov.out)
+
+TukeyHSD(aov.out)
+```
+
+Creating new data set, the original data set. Going to predict try to predict sale price that is higher than the mean sale price.
+```{r}
+shoedata2 <- shoedata
+
+```
+
+Creating a variable that determines if the sale price is higher than the average sale price. Doing this to determine the categories that best predict sale price
+```{r}
+shoedata2$high_sale <- ifelse(shoedata2$sale_price > 371, 'Yes', 'No')
+shoedata2$high_sale <- as.factor(shoedata2$high_sale)
+```
+
+Creating  a decision tree based on high sale
+```{r}
+tree.shoedata2 = tree(high_sale~.-sale_price, data=shoedata2)
+summary(tree.shoedata2)
+```
+
+
+Plotting the decision tree. Looking at the tree shoes with a retail price under 165 has a good chance of having a high resale price. If retail price is greater than 180 then the resle price will be high and if retail price is greater than 235 the resale price will be high.
+```{r}
+plot(tree.shoedata2)
+text(tree.shoedata2, pretty = 0)
+```
+
+Breaking the data into train and test data set. Also, going to shuffle the data. It is probably ok without shuffling but it doesn't hurt.
+```{r}
+#This is where the shuffle happens. This generates a random list of the data. Mixing the data will be important in our decision tree.
+set.seed(101)
+shuffle_index <- sample(1:nrow(shoedata2))
+head(shuffle_index)
+
+#Creating the new dataset with the mixed up data set.
+shoedata2<- shoedata2[shuffle_index, ]
+
+#Breaking the data into train and test datasets. Splitting the data 80/20
+smp_siz = floor(0.8*nrow(shoedata2))
+train_ind = sample(seq_len(nrow(shoedata2)),size = smp_siz) 
+train =shoedata2[train_ind,] #creates the training dataset with row numbers stored in train_ind
+test=shoedata2[-train_ind,]
+```
+
+Predicting high sale price. First train the model on the train data set. Next will run the model using test data set. We were able to acurately predict high sale price about 42% of the time. However, we were able to predict no high sale price about 99% of the time.
+```{r}
+tree.train = tree(high_sale~.-sale_price, data=train)
+tree.pred = predict(tree.train, test, type="class")
+with(test, table(tree.pred, high_sale))
+```
+
+
+
+
+
+
+
+
